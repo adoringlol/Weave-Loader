@@ -105,8 +105,21 @@ private fun FileManager.ModJar.parseAndMap(): File =  JarFile(file).use {
 }
 
 private suspend fun retrieveMods() = withContext(Dispatchers.IO) {
-    FileManager
-        .getMods()
+    val discovered = FileManager.getMods()
+    val (legacyMods, weaveMods) = discovered.partition { mod ->
+        runCatching {
+            JarFile(mod.file).use { jar ->
+                jar.getEntry("META-INF/services/com.minecraft.agentloader.api.AgentMod") != null ||
+                    jar.getEntry("META-INF/services/com.minecraft.agentloader.api.AgentModV2") != null
+            }
+        }.getOrDefault(false)
+    }
+
+    if (legacyMods.isNotEmpty()) {
+        logger.info("Deferred ${legacyMods.size} legacy AgentMod file(s) to the compatibility layer")
+    }
+
+    weaveMods
         .map { mod -> async { mod.parseAndMap() } }
         .awaitAll()
 }

@@ -44,34 +44,6 @@ public object URLClassLoaderTransformer : SafeTransformer {
             "kotlin."
         )
 
-        // private final List<String> weave$ignoredPackages = new ArrayList<>();
-        node.visitField(
-            Opcodes.ACC_PRIVATE or Opcodes.ACC_FINAL,
-            "weave\$ignoredPackages",
-            "Ljava/util/List;",
-            null,
-            null
-        )
-
-        node.methods.filter { it.name == "<init>" }.forEach { methodNode ->
-            methodNode.instructions.insert(asm {
-                aload(0)
-
-                new("java/util/ArrayList")
-                dup
-                invokespecial("java/util/ArrayList", "<init>", "()V")
-
-                defaultIgnoredPackages.forEach { pkg ->
-                    dup
-                    ldc(pkg)
-                    invokeinterface("java/util/List", "add", "(Ljava/lang/Object;)Z")
-                    pop
-                }
-
-                putfield(node.name, "weave\$ignoredPackages", "Ljava/util/List;")
-            })
-        }
-
         node.visitMethod(
             Opcodes.ACC_PRIVATE or Opcodes.ACC_FINAL,
             "weave\$shouldIgnore",
@@ -79,34 +51,20 @@ public object URLClassLoaderTransformer : SafeTransformer {
             null,
             null
         ).visitAsm {
-            val loopStart = LabelNode()
-            val loopEnd = LabelNode()
+            val ignored = LabelNode()
 
-            // Iterator<String> iter = weave$ignoredPackages.iterator();
-            aload(0)
-            getfield(node.name, "weave\$ignoredPackages", "Ljava/util/List;")
-            invokeinterface("java/util/List", "iterator", "()Ljava/util/Iterator;")
-            astore(2)
+            defaultIgnoredPackages.forEach { pkg ->
+                aload(1)
+                ldc(pkg)
+                invokevirtual("java/lang/String", "startsWith", "(Ljava/lang/String;)Z")
+                ifne(ignored)
+            }
 
-            // while (iter.hasNext())
-            +loopStart
-            aload(2)
-            invokeinterface("java/util/Iterator", "hasNext", "()Z")
-            ifeq(loopEnd)
-
-            // if (iter.next().startsWith(pkg))
-            aload(1)
-            aload(2)
-            invokeinterface("java/util/Iterator", "next", "()Ljava/lang/Object;")
-            checkcast("java/lang/String")
-            invokevirtual("java/lang/String", "startsWith", "(Ljava/lang/String;)Z")
-            ifeq(loopStart)
-
-            iconst_1
+            iconst_0
             ireturn
 
-            +loopEnd
-            iconst_0
+            +ignored
+            iconst_1
             ireturn
         }
 
@@ -118,27 +76,27 @@ public object URLClassLoaderTransformer : SafeTransformer {
             _return
         }
 
-        val loadClassInject = asm {
-            val notIgnored = LabelNode()
-
-            // if (weave$shouldIgnore(name))
-            aload(0)
-            aload(1)
-            invokespecial(node.name, "weave\$shouldIgnore", "(Ljava/lang/String;)Z")
-            ifeq(notIgnored)
-
-            // return ClassLoader.getSystemClassLoader().loadClass(name);
-            invokestatic("java/lang/ClassLoader", "getSystemClassLoader", "()Ljava/lang/ClassLoader;")
-            aload(1)
-            invokevirtual("java/lang/ClassLoader", "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;")
-            areturn
-
-            +notIgnored
-        }
-
         listOf("loadClass", "findClass")
             .mapNotNull { t -> node.methods.find { it.name == t } }
-            .forEach { it.instructions.insert(loadClassInject) }
+            .forEach { method ->
+                method.instructions.insert(asm {
+                    val notIgnored = LabelNode()
+
+                    // if (weave$shouldIgnore(name))
+                    aload(0)
+                    aload(1)
+                    invokespecial(node.name, "weave\$shouldIgnore", "(Ljava/lang/String;)Z")
+                    ifeq(notIgnored)
+
+                    // return ClassLoader.getSystemClassLoader().loadClass(name);
+                    invokestatic("java/lang/ClassLoader", "getSystemClassLoader", "()Ljava/lang/ClassLoader;")
+                    aload(1)
+                    invokevirtual("java/lang/ClassLoader", "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;")
+                    areturn
+
+                    +notIgnored
+                })
+            }
 
         return LoaderClassWriter(loader, reader, ClassWriter.COMPUTE_FRAMES).also { node.accept(it) }.toByteArray()
     }

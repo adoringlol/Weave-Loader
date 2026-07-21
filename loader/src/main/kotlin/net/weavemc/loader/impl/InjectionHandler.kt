@@ -15,6 +15,8 @@ import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.Opcodes
 import org.objectweb.asm.commons.SimpleRemapper
 import org.objectweb.asm.tree.ClassNode
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.io.path.createDirectories
 import kotlin.random.Random
 import kotlin.random.nextUInt
@@ -28,10 +30,16 @@ public object InjectionHandler : SafeTransformer {
      */
     public val dumpBytecode: Boolean = System.getProperty("dumpBytecode")?.toBoolean() ?: false
 
-    private val modifiers = mutableListOf<Modifier>()
+    private val modifiersByTarget =
+        ConcurrentHashMap<String, ConcurrentHashMap<String, CopyOnWriteArrayList<Modifier>>>()
 
     public fun registerModifier(modifier: Modifier) {
-        modifiers += modifier
+        for (target in modifier.targets) {
+            modifiersByTarget
+                .computeIfAbsent(target) { ConcurrentHashMap() }
+                .computeIfAbsent(modifier.namespace) { CopyOnWriteArrayList() }
+                .add(modifier)
+        }
     }
 
     private fun ClassNode.remap(from: String, to: String) {
@@ -43,8 +51,7 @@ public object InjectionHandler : SafeTransformer {
         className: String,
         originalClass: ByteArray
     ): ByteArray? {
-        val groupedModifiers = modifiers.filter { className in it.targets }.groupBy { it.namespace }
-        if (groupedModifiers.isEmpty()) return null
+        val groupedModifiers = modifiersByTarget[className] ?: return null
 
         with(MappingsHandler) {
             val classReader = originalClass.asClassReader()

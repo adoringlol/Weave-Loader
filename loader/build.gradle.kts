@@ -14,6 +14,10 @@ allprojects {
     version = libs.versions.weave.get()
 }
 
+base {
+    archivesName = "weave-lunar-loader"
+}
+
 repositories {
     maven("https://maven.fabricmc.net/")
 }
@@ -82,12 +86,12 @@ tasks {
 
         manifest.attributes(
             mapOf(
-                "Specification-Title" to "Weave Loader",
+                "Specification-Title" to "Weave Lunar Loader",
                 "Specification-Version" to "0", // we're still in beta, so this is 0
-                "Specification-Vendor" to "WeaveMC",
-                "Implementation-Title" to "Weave Loader",
+                "Specification-Vendor" to "Weave Lunar",
+                "Implementation-Title" to "Weave Lunar Loader",
                 "Implementation-Version" to version,
-                "Implementation-Vendor" to "WeaveMC",
+                "Implementation-Vendor" to "Weave Lunar",
             ), "net.weavemc.loader.impl"
         )
     }

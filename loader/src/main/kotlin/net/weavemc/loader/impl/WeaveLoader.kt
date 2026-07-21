@@ -1,16 +1,20 @@
 package net.weavemc.loader.impl
 
+import com.minecraft.agentloader.LegacyAgentLoader
 import com.grappenmaker.mappings.ClasspathLoaders
 import com.grappenmaker.mappings.aw.*
 import com.grappenmaker.mappings.remappingNames
 import me.xtrm.klog.dsl.klog
 import net.weavemc.api.Hook
 import net.weavemc.api.ModInitializer
+import net.weavemc.api.lunar.LunarClient
 import net.weavemc.internals.GameInfo
+import net.weavemc.internals.MinecraftClient
 import net.weavemc.internals.ModConfig
 import net.weavemc.internals.getOrCreateWeaveDir
 import net.weavemc.loader.impl.bootstrap.PublicButInternal
 import net.weavemc.loader.impl.bootstrap.transformer.URLClassLoaderAccessor
+import net.weavemc.loader.impl.lunar.LunarNotificationService
 import net.weavemc.loader.impl.mixin.SandboxedMixinLoader
 import net.weavemc.loader.impl.util.*
 import org.apache.maven.model.building.DefaultModelBuilder
@@ -120,9 +124,17 @@ public class WeaveLoader(
         INSTANCE = this
         launchStart = System.currentTimeMillis()
         instrumentation.addTransformer(InjectionHandler)
+        installClientIntegrations()
         addMinecraftApi()
 
         finalize()
+    }
+
+    private fun installClientIntegrations() {
+        if (GameInfo.client == MinecraftClient.LUNAR) {
+            LunarClient.installNotificationProvider(LunarNotificationService(instrumentation))
+            logger.info("Enabled Lunar Client integrations")
+        }
     }
 
     private fun addMinecraftApi() {
@@ -264,6 +276,12 @@ public class WeaveLoader(
                     }
                 }
             }
+        }
+
+        runCatching {
+            LegacyAgentLoader.initialize(instrumentation, GameInfo.version.versionName)
+        }.onFailure {
+            logger.error("Failed to initialize legacy agentmod compatibility", it)
         }
 
         tryCleanUpCache()

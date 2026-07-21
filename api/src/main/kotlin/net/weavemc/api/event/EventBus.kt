@@ -14,7 +14,7 @@ import java.util.function.Consumer
  */
 @Suppress("unused")
 public object EventBus {
-    private val map: MutableMap<Class<*>, MutableList<Consumer<*>>> = ConcurrentHashMap()
+    private val map: MutableMap<Class<*>, CopyOnWriteArrayList<Consumer<*>>> = ConcurrentHashMap()
 
     /**
      * Subscribe an object to the event bus, turning methods defined in it into listeners using @SubscribeEvent.
@@ -59,7 +59,13 @@ public object EventBus {
         var curr: Class<*> = event.javaClass
 
         while (curr != Any::class.java) {
-            getListeners(curr).filterIsInstance<Consumer<T>>().forEach(Consumer { it.accept(event) })
+            val listeners = map[curr]
+            if (listeners != null) {
+                for (listener in listeners) {
+                    @Suppress("UNCHECKED_CAST")
+                    (listener as Consumer<T>).accept(event)
+                }
+            }
             curr = curr.superclass
         }
     }
@@ -90,7 +96,8 @@ public object EventBus {
      * @param event The corresponding event class to grab the listeners from.
      * @return a list of listeners corresponding to the event class.
      */
-    private fun getListeners(event: Class<*>) = map.computeIfAbsent(event) { CopyOnWriteArrayList() }
+    private fun getListeners(event: Class<*>): CopyOnWriteArrayList<Consumer<*>> =
+        map.computeIfAbsent(event) { CopyOnWriteArrayList() }
 
     private class ReflectEventConsumer(val obj: Any, val method: Method) : Consumer<Event?> {
         override fun accept(event: Event?) {
