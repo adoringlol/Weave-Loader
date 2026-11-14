@@ -15,6 +15,7 @@ import net.weavemc.internals.getOrCreateWeaveDir
 import net.weavemc.loader.impl.bootstrap.PublicButInternal
 import net.weavemc.loader.impl.bootstrap.transformer.URLClassLoaderAccessor
 import net.weavemc.loader.impl.lunar.LunarNotificationService
+import net.weavemc.loader.impl.lunar.LunarRuntimeService
 import net.weavemc.loader.impl.mixin.SandboxedMixinLoader
 import net.weavemc.loader.impl.util.*
 import org.apache.maven.model.building.DefaultModelBuilder
@@ -133,6 +134,7 @@ public class WeaveLoader(
     private fun installClientIntegrations() {
         if (GameInfo.client == MinecraftClient.LUNAR) {
             LunarClient.installNotificationProvider(LunarNotificationService(instrumentation))
+            LunarClient.installRuntimeProvider(LunarRuntimeService(instrumentation))
             logger.info("Enabled Lunar Client integrations")
         }
     }
