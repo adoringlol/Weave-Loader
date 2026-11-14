@@ -170,6 +170,8 @@ public fun File.createRemappedCache(
     return cache.toFile()
 }
 
+private val lunarForgeArtifact = Regex("""(?:^|[\s,;\\/])(?:Forge_v\d+_\d+\.jar|forge-[\d.]+-SNAPSHOT-all\.jar)""")
+
 internal fun setGameInfo() {
     val cwd = Path(System.getProperty("user.dir"))
     val version = System.getProperty("weave.environment.version")
@@ -197,10 +199,18 @@ internal fun setGameInfo() {
         else -> "vanilla"
     }
 
-    System.getProperties()["weave.game.info"] = mapOf(
-        "version" to version,
-        "client" to client
-    )
+    // Lunar passes its module's jars to Genesis through --ichorClassPath / --ichorExternalFiles;
+    // the Forge module ships Forge_v1_8.jar and forge-0.1.0-SNAPSHOT-all.jar there.
+    val loader = System.getProperty("weave.environment.loader") ?: when {
+        client == "lunar client" && lunarForgeArtifact.containsMatchIn(GameInfo.commandLineArgs) -> "forge"
+        else -> null
+    }
+
+    System.getProperties()["weave.game.info"] = buildMap {
+        put("version", version)
+        put("client", client)
+        if (loader != null) put("loader", loader)
+    }
 }
 
 // TODO: give this a good place

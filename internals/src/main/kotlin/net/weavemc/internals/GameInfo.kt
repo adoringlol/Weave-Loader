@@ -67,6 +67,18 @@ public object GameInfo {
     public val client: MinecraftClient by lazy {
         clientString.let(MinecraftClient::fromClientName) ?: error("Could not find game client")
     }
+
+    /**
+     * The mod loader running underneath the client, e.g. `"forge"` when Lunar Client is launched
+     * with its Forge module. `null` when the client runs without a separate loader.
+     */
+    public val loader: String? by lazy { rawGameInfo["loader"]?.lowercase() }
+
+    /**
+     * Lunar Client's Forge module keeps Forge's SRG member names at runtime (e.g. `func_147108_a`
+     * instead of `displayGuiScreen`), unlike Lunar's default OptiFine module which uses MCP names.
+     */
+    public val isLunarForge: Boolean by lazy { client == MinecraftClient.LUNAR && loader == "forge" }
 }
 
 public enum class MappingsType(public val id: String) {

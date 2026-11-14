@@ -43,7 +43,11 @@ public object MappingsHandler {
 
     public val environmentRuntimeNamespace: String by lazy {
         System.getProperty("weave.environment.namespace") ?: when (GameInfo.client) {
-            MinecraftClient.LUNAR -> if (GameInfo.version < MinecraftVersion.V1_16_5) MCP.named else MOJANG.named
+            MinecraftClient.LUNAR -> when {
+                GameInfo.version >= MinecraftVersion.V1_16_5 -> MOJANG.named
+                GameInfo.isLunarForge -> MCP.srg
+                else -> MCP.named
+            }
             MinecraftClient.FORGE -> MCP.srg
             MinecraftClient.VANILLA, MinecraftClient.LABYMOD, MinecraftClient.BADLION -> "official"
         }
