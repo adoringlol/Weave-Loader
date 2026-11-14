@@ -53,6 +53,16 @@ public object InjectionHandler : SafeTransformer {
     ): ByteArray? {
         val groupedModifiers = modifiersByTarget[className] ?: return null
 
+        return MappingsHandler.withTransformingClass(className, originalClass) {
+            transformTargeted(className, originalClass, groupedModifiers)
+        }
+    }
+
+    private fun transformTargeted(
+        className: String,
+        originalClass: ByteArray,
+        groupedModifiers: Map<String, List<Modifier>>,
+    ): ByteArray {
         with(MappingsHandler) {
             val classReader = originalClass.asClassReader()
             val node = classReader.asClassNode()

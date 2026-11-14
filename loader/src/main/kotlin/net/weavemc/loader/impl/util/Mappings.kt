@@ -11,6 +11,7 @@ import me.xtrm.klog.dsl.klog
 import net.weavemc.internals.*
 import net.weavemc.internals.MappingsType.MCP
 import net.weavemc.internals.MappingsType.MOJANG
+import net.weavemc.loader.impl.bootstrap.Bootstrap
 import org.objectweb.asm.*
 import org.objectweb.asm.commons.ClassRemapper
 import org.objectweb.asm.commons.Remapper
@@ -78,8 +79,47 @@ public object MappingsHandler {
             )
         )
 
-        return { name -> cl(namesFrom[name] ?: name)?.remap(mapper) }
+        val runtimeToExpected = if (expectedNamespace != environmentRuntimeNamespace) SimpleRemapper(
+            Opcodes.ASM9,
+            mergedMappings.mappings.asASMMapping(
+                from = environmentRuntimeNamespace,
+                to = expectedNamespace,
+                includeMethods = false,
+                includeFields = false
+            )
+        ) else null
+
+        return { name ->
+            cl(namesFrom[name] ?: name)?.remap(mapper)
+                ?: runtimeClassBytes(name)?.let { bytes -> runtimeToExpected?.let { bytes.remap(it) } ?: bytes }
+        }
     }
+
+    /**
+     * Classes that are being transformed right now, keyed by internal name. Their bytes are offered to
+     * inheritance lookups before the class loader can serve them.
+     */
+    private val transformingClasses = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
+
+    internal fun <T> withTransformingClass(name: String, bytes: ByteArray, block: () -> T): T {
+        transformingClasses[name] = bytes
+        try {
+            return block()
+        } finally {
+            transformingClasses.remove(name)
+        }
+    }
+
+    /**
+     * Bytes, in the runtime namespace, of a class that is not part of vanilla Minecraft — e.g. Forge's
+     * `GuiIngameForge` under Lunar's Forge module, which lives in Lunar's game class loader rather than on
+     * the system class path. Without these, members inherited from Minecraft classes (`renderGameOverlay`
+     * in `GuiIngameForge`) cannot be remapped.
+     */
+    private fun runtimeClassBytes(name: String): ByteArray? =
+        transformingClasses[name] ?: runCatching {
+            Bootstrap.minecraftBootstrapClassLoader?.getResourceAsStream("$name.class")?.use { it.readBytes() }
+        }.getOrNull()
 
     private val cachedMappers = mutableMapOf<Pair<String, String>, MappingsRemapper>()
 
